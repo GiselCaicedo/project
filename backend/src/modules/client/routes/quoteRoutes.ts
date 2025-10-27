@@ -4,6 +4,7 @@ import {
   createClientQuoteCtrl,
   getClientQuoteDetailCtrl,
   generateInvoiceFromQuoteCtrl,
+  sendClientQuoteEmailCtrl,
 } from '../controllers/quoteController.js'
 
 const quoteRoutes = Router()
@@ -19,5 +20,8 @@ quoteRoutes.get('/:id', getClientQuoteDetailCtrl)
 
 // POST /quotes/:id/generate-invoice - Generar factura desde cotización
 quoteRoutes.post('/:id/generate-invoice', generateInvoiceFromQuoteCtrl)
+
+// POST /quotes/:id/send-email - Enviar cotización por correo
+quoteRoutes.post('/:id/send-email', sendClientQuoteEmailCtrl)
 
 export default quoteRoutes

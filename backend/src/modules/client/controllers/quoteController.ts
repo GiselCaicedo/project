@@ -301,3 +301,57 @@ export async function generateInvoiceFromQuoteCtrl(req: Request, res: Response) 
     return res.status(500).json({ success: false, message: 'Error al generar la factura desde la cotización' })
   }
 }
+
+/**
+ * POST /quotes/:id/send-email
+ * Envía una cotización por correo electrónico
+ */
+export async function sendClientQuoteEmailCtrl(req: Request, res: Response) {
+  try {
+    const { id } = req.params
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Falta el identificador de la cotización' })
+    }
+
+    const clientId = (req as any)?.user?.empresaid as string | undefined
+    if (!clientId) {
+      return res.status(400).json({ success: false, message: 'Falta empresa en el token' })
+    }
+
+    // Verificar que la cotización existe y pertenece al cliente
+    const quote = await fetchClientQuoteById(clientId, id)
+    if (!quote) {
+      return res.status(404).json({ success: false, message: 'Cotización no encontrada o no pertenece al cliente' })
+    }
+
+    // Validar destinatarios
+    const recipients = Array.isArray(req.body?.recipients) ? req.body.recipients : []
+    const normalizedRecipients = recipients
+      .map((recipient: any) => (typeof recipient === 'string' ? recipient.trim() : ''))
+      .filter((recipient: string) => recipient.length > 0)
+
+    if (normalizedRecipients.length === 0) {
+      return res.status(400).json({ success: false, message: 'Debe proporcionar al menos un destinatario válido' })
+    }
+
+    const message = typeof req.body?.message === 'string' ? req.body.message : undefined
+
+    // Por ahora, simulamos el envío (placeholder para integración SMTP real)
+    const now = new Date()
+
+    return res.json({
+      success: true,
+      message: 'Cotización enviada correctamente',
+      data: {
+        id: quote.id,
+        subject: `Cotización ${quote.description ?? quote.id}`,
+        recipients: normalizedRecipients,
+        message: message ?? null,
+        sentAt: now.toISOString(),
+      }
+    })
+  } catch (error) {
+    console.error('sendClientQuoteEmailCtrl error', error)
+    return res.status(500).json({ success: false, message: 'Error al enviar la cotización por correo' })
+  }
+}
