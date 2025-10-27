@@ -1,0 +1,392 @@
+ESTRUCTURA DE COTIZACIONES - ANÁLISIS COMPLETO
+==============================================
+
+1. MODELOS PRISMA (Base de Datos)
+=================================
+
+MODELO PRINCIPAL: quote
+├── id (UUID) - Identificador único
+├── client_id (UUID) - Referencia al cliente
+├── description (VarChar) - Descripción/referencia
+├── value (VarChar) - Valor total en string
+├── url (VarChar) - URL del PDF
+├── created (Timestamptz) - Fecha de creación
+├── updated (Timestamptz) - Fecha de actualización
+├── status (Boolean?) - null=pendiente, true=aprobada, false=rechazada
+└── Relaciones:
+    ├── client (relación N:1)
+    ├── quote_detail[] (relación 1:N)
+    └── quote_attachment[] (relación 1:N)
+
+MODELO: quote_detail (Detalles de la cotización)
+├── id (UUID)
+├── quote_id (UUID) - FK a quote
+├── service_id (UUID) - FK a service
+├── item (Int) - Número de item
+├── quantity (Int) - Cantidad
+├── total_value (Float) - Valor total del item
+├── created (Timestamptz)
+├── updated (Timestamptz)
+├── status (Boolean?) - Estado del item
+└── Relaciones:
+    ├── quote (relación N:1)
+    └── service (relación N:1)
+
+MODELO: quote_attachment (Relación cotización-factura)
+├── id (UUID)
+├── quote_id (UUID) - FK a quote
+├── invoice_id (UUID) - FK a invoice
+└── Relaciones:
+    ├── quote (relación N:1)
+    └── invoice (relación N:1)
+
+MODELO: service (Servicios disponibles)
+├── id (UUID)
+├── service_category_id (UUID)
+├── name (VarChar)
+├── unit (VarChar)
+├── description (Text)
+├── price (Decimal 12,2)
+├── frequency (VarChar)
+├── start_date (Timestamptz)
+├── end_date (Timestamptz)
+├── tax_one_id (UUID) - Primer impuesto
+├── tax_two_id (UUID) - Segundo impuesto
+├── subtotal (Decimal 12,2)
+├── created (Timestamptz)
+├── updated (Timestamptz)
+├── status (Boolean)
+└── Relaciones:
+    ├── quote_detail[] (1:N)
+    ├── invoice_detail[] (1:N)
+    ├── service_category (N:1)
+    ├── tax_one (N:1)
+    └── tax_two (N:1)
+
+MODELO: tax (Impuestos)
+├── id (UUID)
+├── name (VarChar)
+├── description (VarChar)
+├── percentage (Decimal 5,2)
+├── active (Boolean)
+├── created (Timestamptz)
+└── updated (Timestamptz)
+
+MODELO: invoice (Facturas relacionadas)
+├── id (UUID)
+├── client_id (UUID)
+├── service_id (UUID)
+├── description (VarChar)
+├── value (VarChar)
+├── url (VarChar)
+├── subtotal (Decimal 12,2)
+├── tax_one (Decimal 12,2)
+├── tax_two (Decimal 12,2)
+├── include_iva (Boolean)
+├── total (Decimal 12,2)
+├── created (Timestamptz)
+├── updated (Timestamptz)
+├── status (Boolean)
+├── expiry (Timestamptz)
+└── Relaciones:
+    ├── quote_attachment[] (1:N)
+    ├── invoice_detail[] (1:N)
+    ├── client (N:1)
+    └── service (N:1)
+
+2. ENDPOINTS API
+================
+
+ADMIN ROUTES (/api/v1/admin/quotes)
+─────────────────────────────────────
+GET    /                    → listQuotesCtrl        [Lista todas las cotizaciones]
+POST   /                    → createQuoteCtrl       [Crea nueva cotización]
+GET    /:id                 → getQuoteByIdCtrl      [Obtiene detalle de cotización]
+PUT    /:id                 → updateQuoteCtrl       [Actualiza cotización]
+DELETE /:id                 → deleteQuoteCtrl       [Elimina cotización]
+POST   /:id/pdf             → generateQuotePdfCtrl  [Genera PDF]
+POST   /:id/email           → sendQuoteEmailCtrl    [Envía por email]
+POST   /:id/invoice         → convertQuoteToInvoiceCtrl [Convierte a factura]
+
+CLIENT ROUTES (/api/v1/client/quotes)
+──────────────────────────────────────
+GET    /                    → listClientQuotesCtrl       [Lista cotizaciones del cliente]
+POST   /                    → createClientQuoteCtrl      [Cliente crea cotización]
+GET    /:id                 → getClientQuoteDetailCtrl   [Detalle de cotización]
+POST   /:id/generate-invoice → generateInvoiceFromQuoteCtrl [Genera factura desde cotización]
+
+3. SERVICIOS BACKEND
+====================
+
+ADMIN QUOTE SERVICE (/backend/src/modules/admin/services/quoteService.ts)
+──────────────────────────────────────────────────────────────────────────
+✓ listQuotes()                      → Obtiene todas las cotizaciones con detalles
+✓ createQuote(payload)              → Crea nueva cotización con servicios
+✓ getQuoteById(id)                  → Obtiene cotización con acciones disponibles
+✓ generateQuotePdf(id)              → Genera URL de PDF para cotización
+✓ sendQuoteByEmail(id, payload)     → Envía cotización por email
+✓ convertQuoteToInvoice(id)         → Convierte cotización a factura (transaccional)
+✓ updateQuote(id, payload)          → Actualiza cotización (con auto-facturación si se aprueba)
+✓ deleteQuote(id)                   → Elimina cotización (solo si no tiene factura)
+
+Características:
+- Validación exhaustiva de servicios
+- Manejo de conversión automática de cotización a factura
+- Cálculo automático de totales
+- Prevención de eliminación de cotizaciones facturadas
+- Transacciones ACID
+
+CLIENT QUOTE SERVICE (/backend/src/modules/client/services/quoteService.ts)
+────────────────────────────────────────────────────────────────────────────
+✓ listClientQuotes(clientId)        → Lista cotizaciones del cliente
+✓ fetchClientQuoteById(clientId, id) → Obtiene detalle con acceso validado
+✓ generateInvoiceFromQuote(quoteId) → Crea factura desde cotización
+✓ submitClientQuote(clientId, payload) → Cliente envía nueva cotización
+
+4. COMPONENTES FRONTEND - ADMIN
+===============================
+
+LISTA DE COTIZACIONES (QuoteListView.tsx)
+─────────────────────────────────────────
+✓ Tabla ag-grid con columnas:
+  - Referencia (enlace a detalle)
+  - Cliente
+  - Número de servicios
+  - Monto total (formateado)
+  - Factura asociada (si existe)
+  - Estado (Pendiente/Aprobada/Rechazada)
+  - Fecha de emisión
+  - Fecha de actualización
+  - Enlace a PDF
+  - Acciones
+✓ Búsqueda rápida por referencia
+✓ Botón para crear nueva cotización
+✓ Panel lateral para crear cotización (QuoteCreateForm)
+✓ Carga perezosa de catálogos (clientes y servicios)
+
+CREAR COTIZACIÓN (QuoteCreateForm.tsx)
+──────────────────────────────────────
+✓ Campos:
+  - Selección de cliente (dropdown)
+  - Descripción (texto libre)
+  - Fecha de emisión (date picker)
+  - Tabla dinámica de servicios:
+    * Seleccionar servicio (autocomplete)
+    * Cantidad (número)
+    * Precio unitario (auto-completa desde servicio)
+    * Precio total (calculado)
+✓ Agregar/eliminar filas de servicios
+✓ Validación de campos obligatorios
+✓ Cálculo automático de totales
+
+DETALLE DE COTIZACIÓN (QuoteDetailPageView.tsx)
+───────────────────────────────────────────────
+✓ Inspector de detalles (QuoteDetailInspector)
+✓ Acciones disponibles:
+  - Generar PDF
+  - Enviar por email
+  - Convertir a factura
+✓ Panel de edición (QuoteEditForm)
+✓ Mostrar estado de factura asociada
+✓ Refrescar información
+
+INSPECTOR DE DETALLES (QuoteDetailInspector.tsx)
+────────────────────────────────────────────────
+✓ Información general:
+  - Referencia
+  - Cliente
+  - Monto total
+  - Estado
+  - Fechas de creación/actualización
+  - Descripción
+✓ Tabla de servicios incluidos
+✓ Información de factura adjunta (si existe)
+✓ Botones de acción con estados de carga
+
+EDITAR COTIZACIÓN (QuoteEditForm.tsx)
+─────────────────────────────────────
+✓ Campos editables:
+  - Descripción
+  - Estado (Pendiente/Aprobada/Rechazada)
+  - Monto
+  - URL del PDF
+✓ Validación de cambios
+✓ Prevención de cambios en cotizaciones facturadas
+
+5. COMPONENTES FRONTEND - CLIENTE
+=================================
+
+LISTA DE COTIZACIONES (MainQuotesClient.tsx)
+─────────────────────────────────────────────
+✓ Tabla ag-grid con columnas:
+  - Referencia
+  - Descripción
+  - Monto
+  - Factura asociada
+  - Estado
+  - Fecha de creación
+  - Fecha de actualización
+✓ Información de factura si existe
+✓ Estados visuales con colores
+
+DETALLE DE COTIZACIÓN (QuoteDetailView.tsx)
+───────────────────────────────────────────
+✓ Sección de información general:
+  - Cliente
+  - Referencia
+  - Valor total
+  - Fechas de creación/actualización
+  - Descripción
+  - Enlace a documento PDF
+✓ Sección de servicios incluidos (tabla):
+  - Ítem
+  - Servicio
+  - Cantidad
+  - Precio unitario
+  - Total
+✓ Sección de adjuntos:
+  - Información de facturas vinculadas
+
+6. TIPOS DE DATOS TYPESCRIPT
+=============================
+
+ADMIN TYPES (admin/quotes/types.ts)
+──────────────────────────────────
+✓ QuoteStatus = 'pendiente' | 'aprobada' | 'rechazada'
+✓ QuoteActionType = 'pdf' | 'email' | 'invoice'
+✓ QuoteSummary - Resumen para lista
+✓ QuoteDetail - Detalle completo con acciones
+✓ QuoteServiceEntry - Item de servicio
+✓ QuoteAttachmentEntry - Adjunto (factura)
+✓ QuoteAction - Acción disponible
+✓ CreateQuoteInput - Input para crear
+✓ UpdateQuoteInput - Input para actualizar
+✓ SendQuoteEmailInput - Input para enviar email
+✓ QuotePdfResult - Resultado de generar PDF
+✓ QuoteInvoiceResult - Resultado de conversión
+
+CLIENT TYPES (client/quotes/types.ts)
+─────────────────────────────────────
+✓ QuoteStatus = 'pendiente' | 'aprobada' | 'rechazada'
+✓ QuoteServiceDetail - Detalle de servicio
+✓ QuoteDetailItem - Item de cotización con servicio
+✓ ClientQuoteSummary - Resumen para cliente
+✓ ClientQuoteRecord - Registro completo del cliente
+✓ ClientQuoteInvoiceSummary - Info de factura
+✓ CreateClientQuoteInput - Input para cliente
+
+7. FUNCIONALIDADES IMPLEMENTADAS
+=================================
+
+✓ CRUD COMPLETO (Admin)
+  - Crear cotizaciones con múltiples servicios
+  - Leer/listar cotizaciones
+  - Actualizar estado y detalles
+  - Eliminar cotizaciones (validación: no si tiene factura)
+
+✓ ACCIONES PRINCIPALES
+  - Generar PDF (placeholder con URL)
+  - Enviar por email (validación de destinatarios)
+  - Convertir a factura (automático al aprobar)
+  - Actualizar estado
+
+✓ RELACIÓN CON FACTURAS
+  - Convertir cotización aprobada en factura
+  - Crear invoice_detail desde quote_detail
+  - Crear relación quote_attachment
+  - Prevenir cambios en cotizaciones facturadas
+
+✓ VALIDACIONES
+  - Cliente debe existir
+  - Servicios deben existir
+  - Cantidad debe ser positiva
+  - Precio unitario válido (opcional)
+  - Al menos un servicio en cotización
+
+✓ TRANSACCIONES
+  - Creación de cotización con detalles (atomic)
+  - Conversión a factura (atomic)
+  - Actualización con facturación automática (atomic)
+
+✓ SEGURIDAD
+  - Filtrado por cliente (cliente solo ve sus cotizaciones)
+  - Validación de permisos implícita (usa empresaid del token)
+  - Transacciones ACID
+
+8. RELACIONES ENTRE ENTIDADES
+==============================
+
+quote ──┬─→ client
+        ├─→ quote_detail ──→ service ──┬─→ service_category
+        │                               ├─→ tax (tax_one)
+        │                               └─→ tax (tax_two)
+        └─→ quote_attachment ──→ invoice ──→ invoice_detail ──→ service
+
+client ─────────────────→ user
+                         user_setting
+                         user_twofa
+
+9. FLUJO DE CONVERSIÓN COTIZACIÓN → FACTURA
+=============================================
+
+Escenario 1: Admin aprueba cotización
+─────────────────────────────────────
+1. Admin actualiza quote.status = true (aprobada)
+2. Sistema detecta que no tiene factura
+3. Crea automáticamente:
+   - invoice (con datos de quote)
+   - invoice_detail (desde quote_detail)
+   - quote_attachment (vinculación)
+4. Quote actualizado con updated timestamp
+
+Escenario 2: Admin convierte manualmente
+────────────────────────────────────────
+1. Admin presiona "Convertir a factura"
+2. Sistema valida que no tenga factura
+3. Si ya existe, retorna ID existente
+4. Si no existe, realiza mismo proceso que Escenario 1
+5. Retorna invoiceId con resultado
+
+Escenario 3: Cliente genera factura
+───────────────────────────────────
+1. Cliente obtiene cotización
+2. Cliente presiona "Generar factura"
+3. Sistema valida acceso (cliente_id)
+4. Crea invoice y detalles
+5. Crea quote_attachment
+
+10. ESTADO ACTUAL DEL DESARROLLO
+=================================
+
+COMPLETADO (Backend):
+✓ Modelos Prisma
+✓ Validaciones exhaustivas
+✓ Transacciones ACID
+✓ Endpoints REST
+✓ Servicios con lógica de negocio
+✓ Conversión cotización → factura
+
+COMPLETADO (Frontend Admin):
+✓ Listado de cotizaciones
+✓ Crear cotización
+✓ Ver detalle
+✓ Editar información básica
+✓ Generar PDF (placeholder)
+✓ Enviar por email (placeholder)
+✓ Convertir a factura
+
+COMPLETADO (Frontend Cliente):
+✓ Listar sus cotizaciones
+✓ Ver detalle de cotización
+✓ Información de servicios
+✓ Generar factura
+
+EN PROGRESO/PENDIENTE:
+? Generar PDF real (actualmente es placeholder)
+? Envío de emails real (actualmente es placeholder)
+? Notificaciones de cambios
+? Auditoría detallada
+? Rechazar cotizaciones (opción existe pero no hay UI completa)
+? Búsqueda avanzada de cotizaciones
+? Exportar listado de cotizaciones
+
