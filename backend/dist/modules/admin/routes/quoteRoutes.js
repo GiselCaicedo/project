@@ -1,0 +1,10 @@
+import { Router } from 'express';
+import { convertQuoteToInvoiceCtrl, generateQuotePdfCtrl, getQuoteByIdCtrl, listQuotesCtrl, sendQuoteEmailCtrl, updateQuoteCtrl, } from '../controllers/quoteController.js';
+const quoteRoutes = Router();
+quoteRoutes.get('/', listQuotesCtrl);
+quoteRoutes.get('/:id', getQuoteByIdCtrl);
+quoteRoutes.put('/:id', updateQuoteCtrl);
+quoteRoutes.post('/:id/pdf', generateQuotePdfCtrl);
+quoteRoutes.post('/:id/email', sendQuoteEmailCtrl);
+quoteRoutes.post('/:id/invoice', convertQuoteToInvoiceCtrl);
+export default quoteRoutes;
