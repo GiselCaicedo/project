@@ -3,6 +3,8 @@
 import PageHeader from '@shared/components/common/PageHeader';
 import Link from 'next/link';
 import type { ClientQuoteRecord } from '@app/modules/client/quotes/types';
+import { Mail, Loader2 } from 'lucide-react';
+import { useState } from 'react';
 
 type Props = {
   quote: ClientQuoteRecord | null;
@@ -11,11 +13,67 @@ type Props = {
 };
 
 export default function QuoteDetailView({ quote, errorMessage, locale }: Props) {
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [recipients, setRecipients] = useState('');
+  const [message, setMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
+
   const breadcrumbs = [
     { label: 'Panel cliente', href: `/${locale}/client/dashboard` },
     { label: 'Cotizaciones', href: `/${locale}/client/quotes` },
     { label: quote?.reference ?? quote?.id ?? 'Detalle' },
   ];
+
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quote) return;
+
+    setSending(true);
+    setSendError(null);
+    setSendSuccess(null);
+
+    try {
+      const recipientsList = recipients
+        .split(/[\n,;]+/)
+        .map(r => r.trim())
+        .filter(r => r.length > 0);
+
+      if (recipientsList.length === 0) {
+        setSendError('Debe proporcionar al menos un destinatario');
+        setSending(false);
+        return;
+      }
+
+      const response = await fetch(`/api/client/quotes/${quote.id}/send-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipients: recipientsList,
+          message: message.trim() || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Error al enviar la cotización');
+      }
+
+      setSendSuccess('Cotización enviada correctamente por correo electrónico');
+      setRecipients('');
+      setMessage('');
+      setShowEmailForm(false);
+    } catch (error) {
+      console.error('Error sending quote email:', error);
+      setSendError(error instanceof Error ? error.message : 'Error al enviar la cotización');
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -24,17 +82,113 @@ export default function QuoteDetailView({ quote, errorMessage, locale }: Props) 
         title="Detalle de la cotización"
         description="Visualiza los servicios y valores incluidos en la cotización."
         actions={(
-          <Link
-            href={`/${locale}/client/quotes`}
-            className="inline-flex items-center rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-          >
-            Volver
-          </Link>
+          <div className="flex gap-2">
+            {quote && (
+              <button
+                type="button"
+                onClick={() => setShowEmailForm(!showEmailForm)}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-500 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-indigo-600"
+              >
+                <Mail className="h-4 w-4" />
+                Enviar por correo
+              </button>
+            )}
+            <Link
+              href={`/${locale}/client/quotes`}
+              className="inline-flex items-center rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+            >
+              Volver
+            </Link>
+          </div>
         )}
       />
 
       {errorMessage && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{errorMessage}</div>
+      )}
+
+      {sendError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{sendError}</div>
+      )}
+
+      {sendSuccess && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">{sendSuccess}</div>
+      )}
+
+      {showEmailForm && quote && (
+        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+              <Mail className="h-5 w-5 text-indigo-600" />
+              Enviar cotización por correo
+            </h2>
+            <button
+              type="button"
+              onClick={() => setShowEmailForm(false)}
+              className="text-sm text-gray-500 hover:text-gray-700"
+            >
+              Cancelar
+            </button>
+          </div>
+          <form onSubmit={handleSendEmail} className="space-y-4">
+            <div>
+              <label htmlFor="recipients" className="block text-sm font-medium text-gray-700 mb-1">
+                Destinatarios <span className="text-red-500">*</span>
+              </label>
+              <p className="text-xs text-gray-500 mb-2">
+                Separa múltiples correos con comas, puntos y comas o saltos de línea
+              </p>
+              <textarea
+                id="recipients"
+                value={recipients}
+                onChange={(e) => setRecipients(e.target.value)}
+                placeholder="ejemplo@correo.com, otro@correo.com"
+                rows={3}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="email-message" className="block text-sm font-medium text-gray-700 mb-1">
+                Mensaje (opcional)
+              </label>
+              <textarea
+                id="email-message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Mensaje adicional para incluir en el correo"
+                rows={4}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:outline-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowEmailForm(false)}
+                className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={sending}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-500 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {sending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="h-4 w-4" />
+                    Enviar cotización
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </section>
       )}
 
       {quote ? (

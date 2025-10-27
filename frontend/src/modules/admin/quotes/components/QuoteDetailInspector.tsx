@@ -262,6 +262,53 @@ export default function QuoteDetailInspector({
             {quote
               ? (
                 <div className="space-y-6">
+                  {/* Sección de estado y aprobación/rechazo */}
+                  <div className="space-y-3 rounded-2xl border border-gray-200 bg-white px-4 py-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-gray-900">Estado de la cotización</h3>
+                      <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${statusTone[quote.status]?.tone ?? 'bg-gray-100 text-gray-600'}`}>
+                        {statusTone[quote.status]?.label ?? quote.status}
+                      </span>
+                    </div>
+
+                    {quote.status === 'pendiente' && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600">
+                          Esta cotización está pendiente de aprobación. Aprobar generará automáticamente la factura asociada.
+                        </p>
+                        {onEdit && (
+                          <button
+                            type="button"
+                            onClick={onEdit}
+                            className="inline-flex items-center gap-2 rounded-full border border-primary-200 bg-primary-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-primary-600"
+                          >
+                            <Pencil className="h-4 w-4" />
+                            Editar y cambiar estado
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {quote.status !== 'pendiente' && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600">
+                          {quote.status === 'aprobada'
+                            ? 'Esta cotización ha sido aprobada y tiene una factura generada.'
+                            : 'Esta cotización ha sido rechazada.'}
+                        </p>
+                        {onEdit && (
+                          <button
+                            type="button"
+                            onClick={onEdit}
+                            className="text-xs text-primary-600 hover:text-primary-700 hover:underline"
+                          >
+                            Editar cotización
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
                   {pdfAction
                     ? (
                       <div className="space-y-3 rounded-2xl border border-gray-200 bg-white px-4 py-4">
