@@ -1,0 +1,578 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model alert_rule {
+  id                    String    @id
+  name                  String    @db.VarChar
+  type                  String    @db.VarChar
+  conditions            Json?
+  channels              String[]
+  remind_before_minutes Int[]
+  is_active             Boolean?  @default(true)
+  created               DateTime? @db.Timestamptz(6)
+  updated               DateTime? @db.Timestamptz(6)
+}
+
+model client {
+  id              String            @id @db.Uuid
+  name            String?           @db.VarChar
+  created         DateTime?         @db.Timestamptz(6)
+  updated         DateTime?         @db.Timestamptz(6)
+  status          Boolean?
+  client_details  client_details[]
+  client_service  client_service[]
+  invoice         invoice[]
+  log             log[]
+  payment         payment[]
+  quote           quote[]
+  service_request service_request[]
+  service_usage   service_usage[]
+  user            user[]
+}
+
+model client_details {
+  id               String            @id @db.Uuid
+  client_id        String?           @db.Uuid
+  c_parameter_id   String?           @db.Uuid
+  value            String?           @db.VarChar
+  client_parameter client_parameter? @relation(fields: [c_parameter_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  client           client?           @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model client_parameter {
+  id             String           @id @db.Uuid
+  name           String?          @db.VarChar
+  client_details client_details[]
+}
+
+model client_service {
+  id                  String                @id @db.Uuid
+  client_id           String?               @db.Uuid
+  service_id          String?               @db.Uuid
+  created             DateTime?             @db.Timestamptz(6)
+  updated             DateTime?             @db.Timestamptz(6)
+  started             DateTime?             @db.Timestamptz(6)
+  delivery            DateTime?             @db.Timestamptz(6)
+  expiry              DateTime?             @db.Timestamptz(6)
+  frequency           String?               @db.VarChar
+  unit                String?               @db.VarChar
+  url_api             String?               @db.VarChar
+  token_api           String?               @db.VarChar
+  client              client?               @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service             service?              @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service_observation service_observation[]
+}
+
+model consecutive {
+  id      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code    String    @db.VarChar(10)
+  number  Int
+  created DateTime? @default(now()) @db.Timestamptz(6)
+  updated DateTime? @db.Timestamptz(6)
+
+  @@unique([code, number])
+  @@index([code])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model general_setting {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id              String?   @db.Uuid
+  company_timezone       String?   @db.VarChar(50)
+  company_locale         String?   @db.VarChar(10)
+  currency               String?   @db.VarChar(10)
+  first_day_of_week      Int?      @db.SmallInt
+  number_decimals        Int?      @db.SmallInt
+  date_format            String?   @db.VarChar(20)
+  time_format            String?   @db.VarChar(20)
+  branding_primary_color String?   @db.VarChar(9)
+  logo_url               String?
+  is_active              Boolean?  @default(true)
+  created                DateTime? @default(now()) @db.Timestamptz(6)
+  updated                DateTime? @default(now()) @db.Timestamptz(6)
+  status                 Boolean?  @default(true)
+}
+
+model invoice {
+  id                  String                @id @db.Uuid
+  client_id           String?               @db.Uuid
+  description         String?               @db.VarChar
+  value               String?               @db.VarChar
+  url                 String?               @db.VarChar
+  created             DateTime?             @db.Timestamptz(6)
+  updated             DateTime?             @db.Timestamptz(6)
+  status              Boolean?
+  expiry              DateTime?             @db.Timestamptz(6)
+  service_id          String?               @db.Uuid
+  subtotal            Decimal?              @db.Decimal(12, 2)
+  tax_one             Decimal?              @db.Decimal(12, 2)
+  tax_two             Decimal?              @db.Decimal(12, 2)
+  include_iva         Boolean?              @default(false)
+  total               Decimal?              @db.Decimal(12, 2)
+  consecutive         String?               @db.VarChar(50)
+  service             service?              @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_invoice_service")
+  client              client?               @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  invoice_attachment  invoice_attachment[]
+  invoice_comment     invoice_comment[]
+  invoice_detail      invoice_detail[]
+  invoice_observation invoice_observation[]
+  payment_attachment  payment_attachment[]
+  quote_attachment    quote_attachment[]
+}
+
+model invoice_attachment {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice_id String    @db.Uuid
+  name       String?   @db.VarChar(255)
+  url        String?   @db.VarChar
+  type       String?   @db.VarChar(50)
+  created    DateTime? @default(now()) @db.Timestamptz(6)
+  invoice    invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([invoice_id])
+}
+
+model invoice_comment {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice_id String    @db.Uuid
+  user_id    String?   @db.Uuid
+  content    String
+  created    DateTime  @default(now()) @db.Timestamptz(6)
+  updated    DateTime? @db.Timestamptz(6)
+  status     Boolean?  @default(true)
+  invoice    invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_invoice_comment_invoice")
+
+  @@index([invoice_id], map: "idx_invoice_comment_invoice_id")
+}
+
+model invoice_detail {
+  id          String    @id @db.Uuid
+  invoice_id  String?   @db.Uuid
+  service_id  String?   @db.Uuid
+  item        Int?
+  quantity    Int?
+  total_value Float?
+  created     DateTime? @db.Timestamptz(6)
+  updated     DateTime? @db.Timestamptz(6)
+  status      Boolean?
+  invoice     invoice?  @relation(fields: [invoice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service     service?  @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model invoice_observation {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice_id String    @db.Uuid
+  user_id    String?   @db.Uuid
+  content    String
+  created    DateTime  @default(now()) @db.Timestamptz(6)
+  updated    DateTime? @db.Timestamptz(6)
+  status     Boolean?  @default(true)
+  invoice    invoice   @relation(fields: [invoice_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_invoice_observation_invoice")
+
+  @@index([invoice_id], map: "idx_invoice_observation_invoice_id")
+}
+
+model log {
+  id        String    @id @db.Uuid
+  user_id   String?   @db.Uuid
+  role_id   String?   @db.Uuid
+  client_id String?   @db.Uuid
+  user_name String?   @db.VarChar
+  ip        String?   @db.VarChar
+  type      String?   @db.VarChar
+  detail    String?   @db.VarChar
+  created   DateTime? @db.Timestamptz(6)
+  client    client?   @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role      role?     @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user      user?     @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model password_history {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String    @db.Uuid
+  password_hash String
+  changed_at    DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model password_policy {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id                 String?   @db.Uuid
+  min_length                Int?      @default(10) @db.SmallInt
+  require_uppercase         Boolean?  @default(true)
+  require_lowercase         Boolean?  @default(true)
+  require_number            Boolean?  @default(true)
+  require_special           Boolean?  @default(true)
+  disallow_common_passwords Boolean?  @default(true)
+  expire_days               Int?      @db.SmallInt
+  history_last_n            Int?      @default(5) @db.SmallInt
+  is_active                 Boolean?  @default(true)
+  created                   DateTime? @default(now()) @db.Timestamptz(6)
+  updated                   DateTime? @default(now()) @db.Timestamptz(6)
+  status                    Boolean?  @default(true)
+}
+
+model payment {
+  id                String          @id @db.Uuid
+  client_id         String?         @db.Uuid
+  code              String?         @db.VarChar
+  value             String?         @db.VarChar
+  status_pay        String?         @db.VarChar
+  method            String?         @db.VarChar
+  payment_method_id String?         @db.Uuid
+  type              String?         @db.VarChar
+  url               String?         @db.VarChar
+  created           DateTime?       @db.Timestamptz(6)
+  updated           DateTime?       @db.Timestamptz(6)
+  status            Boolean?
+  client            client?         @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  payment_method    payment_method? @relation(fields: [payment_method_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model payment_attachment {
+  id         String    @id @db.Uuid
+  invoice_id String?   @db.Uuid
+  url        String?   @db.VarChar
+  created    DateTime? @default(now()) @db.Timestamp(6)
+  invoice    invoice?  @relation(fields: [invoice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model payment_method {
+  id      String    @id @db.Uuid
+  name    String?   @unique @db.VarChar
+  payment payment[]
+}
+
+model permission {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String?           @db.VarChar
+  section         String?           @db.VarChar
+  role_permission role_permission[]
+}
+
+model quote {
+  id                String              @id @db.Uuid
+  client_id         String?             @db.Uuid
+  description       String?             @db.VarChar
+  value             String?             @db.VarChar
+  url               String?             @db.VarChar
+  created           DateTime?           @db.Timestamptz(6)
+  updated           DateTime?           @db.Timestamptz(6)
+  status            Boolean?
+  consecutive       String?             @db.VarChar(50)
+  subtotal          Decimal?            @db.Decimal(12, 2)
+  tax_one           Decimal?            @db.Decimal(12, 2)
+  tax_two           Decimal?            @db.Decimal(12, 2)
+  include_iva       Boolean?            @default(false)
+  total             Decimal?            @db.Decimal(12, 2)
+  client            client?             @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  quote_attachment  quote_attachment[]
+  quote_comment     quote_comment[]
+  quote_detail      quote_detail[]
+  quote_observation quote_observation[]
+}
+
+model quote_attachment {
+  id         String   @id @db.Uuid
+  quote_id   String?  @db.Uuid
+  invoice_id String?  @db.Uuid
+  invoice    invoice? @relation(fields: [invoice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  quote      quote?   @relation(fields: [quote_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model quote_comment {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quote_id String    @db.Uuid
+  user_id  String?   @db.Uuid
+  content  String
+  created  DateTime? @default(now()) @db.Timestamptz(6)
+  updated  DateTime? @db.Timestamptz(6)
+  status   Boolean?  @default(true)
+  quote    quote     @relation(fields: [quote_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_quote_comment_quote")
+
+  @@index([quote_id], map: "idx_quote_comment_quote_id")
+}
+
+model quote_detail {
+  id          String    @id @db.Uuid
+  quote_id    String?   @db.Uuid
+  service_id  String?   @db.Uuid
+  item        Int?
+  quantity    Int?
+  total_value Float?
+  created     DateTime? @db.Timestamptz(6)
+  updated     DateTime? @db.Timestamptz(6)
+  status      Boolean?
+  quote       quote?    @relation(fields: [quote_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service     service?  @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model quote_observation {
+  id       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quote_id String    @db.Uuid
+  user_id  String?   @db.Uuid
+  content  String
+  created  DateTime? @default(now()) @db.Timestamptz(6)
+  updated  DateTime? @db.Timestamptz(6)
+  status   Boolean?  @default(true)
+  quote    quote     @relation(fields: [quote_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_quote_observation_quote")
+
+  @@index([quote_id], map: "idx_quote_observation_quote_id")
+}
+
+model role {
+  id                 String               @id @db.Uuid
+  name               String?              @db.VarChar
+  role_category      String?              @db.VarChar
+  created            DateTime?            @db.Timestamptz(6)
+  updated            DateTime?            @db.Timestamptz(6)
+  status             Boolean?
+  description        String?              @db.VarChar
+  panel              panel_type           @default(CLIENT)
+  log                log[]
+  role_permission    role_permission[]
+  user               user[]
+  user_module_policy user_module_policy[]
+}
+
+model role_permission {
+  id            String      @id @db.Uuid
+  role_id       String?     @db.Uuid
+  permission_id String?     @db.Uuid
+  permission    permission? @relation(fields: [permission_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role          role?       @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model security_policy {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id               String?   @db.Uuid
+  require_2fa_all         Boolean?  @default(false)
+  require_2fa_admin       Boolean?  @default(true)
+  allowed_2fa_methods     String[]  @default(["totp", "email"])
+  allowed_ips             String[]
+  max_concurrent_sessions Int?      @db.SmallInt
+  is_active               Boolean?  @default(true)
+  created                 DateTime? @default(now()) @db.Timestamptz(6)
+  updated                 DateTime? @default(now()) @db.Timestamptz(6)
+  status                  Boolean?  @default(true)
+}
+
+model service {
+  id                          String            @id @db.Uuid
+  service_category_id         String?           @db.Uuid
+  name                        String?           @db.VarChar
+  unit                        String?           @db.VarChar
+  description                 String?
+  created                     DateTime?         @db.Timestamptz(6)
+  updated                     DateTime?         @db.Timestamptz(6)
+  status                      Boolean?
+  tax_one_id                  String?           @db.Uuid
+  tax_two_id                  String?           @db.Uuid
+  subtotal                    Decimal?          @db.Decimal(12, 2)
+  price                       Decimal?          @db.Decimal(12, 2)
+  frequency                   String?           @db.VarChar
+  start_date                  DateTime?         @db.Timestamptz(6)
+  end_date                    DateTime?         @db.Timestamptz(6)
+  client_service              client_service[]
+  invoice                     invoice[]
+  invoice_detail              invoice_detail[]
+  quote_detail                quote_detail[]
+  tax_service_tax_one_idTotax tax?              @relation("service_tax_one_idTotax", fields: [tax_one_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_service_tax_one")
+  tax_service_tax_two_idTotax tax?              @relation("service_tax_two_idTotax", fields: [tax_two_id], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "fk_service_tax_two")
+  service_category            service_category? @relation(fields: [service_category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service_request             service_request[]
+  service_usage               service_usage[]
+}
+
+model service_category {
+  id      String    @id @db.Uuid
+  name    String?   @db.VarChar
+  service service[]
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model service_request {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id   String    @db.Uuid
+  service_id  String    @db.Uuid
+  description String?
+  status      String    @default("pending") @db.VarChar
+  created     DateTime  @default(now()) @db.Timestamptz(6)
+  updated     DateTime? @db.Timestamptz(6)
+  reviewed_by String?   @db.Uuid
+  reviewed_at DateTime? @db.Timestamptz(6)
+  notes       String?
+  client      client    @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user        user?     @relation(fields: [reviewed_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service     service   @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([client_id])
+  @@index([service_id])
+  @@index([status])
+}
+
+/// Observaciones del administrador en servicios de clientes
+model service_observation {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_service_id String         @db.Uuid
+  user_id           String?        @db.Uuid
+  content           String
+  created           DateTime       @default(now()) @db.Timestamptz(6)
+  updated           DateTime?      @db.Timestamptz(6)
+  status            Boolean?       @default(true)
+  client_service    client_service @relation(fields: [client_service_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([client_service_id])
+}
+
+model service_usage {
+  id         String    @id @db.Uuid
+  client_id  String?   @db.Uuid
+  service_id String?   @db.Uuid
+  start_date DateTime? @db.Timestamptz(6)
+  end_date   DateTime? @db.Timestamptz(6)
+  usage      String?   @db.VarChar
+  created    DateTime? @db.Timestamptz(6)
+  status     String?   @db.VarChar
+  client     client?   @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  service    service?  @relation(fields: [service_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model session_policy {
+  id                         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id                  String?   @db.Uuid
+  idle_timeout_minutes       Int?
+  absolute_session_minutes   Int?
+  remember_me_days           Int?      @db.SmallInt
+  lock_after_failed_attempts Int?      @db.SmallInt
+  lock_window_minutes        Int?      @db.SmallInt
+  lock_duration_minutes      Int?      @db.SmallInt
+  is_active                  Boolean?  @default(true)
+  created                    DateTime? @default(now()) @db.Timestamptz(6)
+  updated                    DateTime? @default(now()) @db.Timestamptz(6)
+  status                     Boolean?  @default(true)
+}
+
+model smtp_config {
+  id                    String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id             String?   @db.Uuid
+  host                  String?   @db.VarChar(150)
+  port                  Int?
+  secure                Boolean?
+  username              String?   @db.VarChar(150)
+  password_encrypted    String?
+  from_name             String?   @db.VarChar(150)
+  from_email            String?   @db.VarChar(150)
+  reply_to_email        String?   @db.VarChar(150)
+  rate_limit_per_minute Int?
+  last_test_status      String?   @db.VarChar(20)
+  last_test_at          DateTime? @db.Timestamptz(6)
+  is_active             Boolean?  @default(true)
+  created               DateTime? @default(now()) @db.Timestamptz(6)
+  updated               DateTime? @default(now()) @db.Timestamptz(6)
+  status                Boolean?  @default(true)
+}
+
+model tax {
+  id                              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                            String    @db.VarChar(100)
+  description                     String?   @db.VarChar(255)
+  percentage                      Decimal   @db.Decimal(5, 2)
+  active                          Boolean?  @default(true)
+  created                         DateTime? @default(now()) @db.Timestamptz(6)
+  updated                         DateTime? @db.Timestamptz(6)
+  service_service_tax_one_idTotax service[] @relation("service_tax_one_idTotax")
+  service_service_tax_two_idTotax service[] @relation("service_tax_two_idTotax")
+}
+
+model user {
+  id              String            @id @db.Uuid
+  role_id         String?           @db.Uuid
+  client_id       String?           @db.Uuid
+  user            String?           @db.VarChar
+  pass            String?           @db.VarChar
+  name            String?           @db.VarChar
+  created         DateTime?         @db.Timestamptz(6)
+  updated         DateTime?         @db.Timestamptz(6)
+  status          Boolean?
+  log             log[]
+  service_request service_request[]
+  client          client?           @relation(fields: [client_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  role            role?             @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model user_module_policy {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  client_id           String?   @db.Uuid
+  allow_self_register Boolean?  @default(false)
+  default_role_id     String?   @db.Uuid
+  invite_expire_hours Int?      @default(48) @db.SmallInt
+  is_active           Boolean?  @default(true)
+  created             DateTime? @default(now()) @db.Timestamptz(6)
+  updated             DateTime? @default(now()) @db.Timestamptz(6)
+  status              Boolean?  @default(true)
+  role                role?     @relation(fields: [default_role_id], references: [id], onUpdate: NoAction)
+}
+
+model user_notification_setting {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String    @unique @db.Uuid
+  channel_email     Boolean?  @default(true)
+  channel_push      Boolean?  @default(true)
+  channel_whatsapp  Boolean?  @default(false)
+  quiet_hours_start Int?      @db.SmallInt
+  quiet_hours_end   Int?      @db.SmallInt
+  digest_daily_hour Int?      @db.SmallInt
+  created           DateTime? @default(now()) @db.Timestamptz(6)
+  updated           DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model user_setting {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id                  String    @unique @db.Uuid
+  locale                   String?   @db.VarChar(10)
+  timezone                 String?   @db.VarChar(50)
+  theme                    String?   @db.VarChar(10)
+  date_format              String?   @db.VarChar(20)
+  time_format              String?   @db.VarChar(20)
+  dashboard_config         Json?     @default("{}")
+  notify_email             Boolean?  @default(true)
+  notify_push              Boolean?  @default(true)
+  notify_whatsapp          Boolean?  @default(false)
+  reminder_default_minutes Int?
+  digest_daily_hour        Int?      @db.SmallInt
+  twofa_enabled            Boolean?  @default(false)
+  twofa_method             String?   @db.VarChar(10)
+  session_timeout_minutes  Int?
+  created                  DateTime? @default(now()) @db.Timestamptz(6)
+  updated                  DateTime? @default(now()) @db.Timestamptz(6)
+  status                   Boolean?  @default(true)
+}
+
+model user_twofa {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String    @unique @db.Uuid
+  type             String    @db.VarChar(10)
+  secret_encrypted String?
+  backup_codes     Json?
+  enabled          Boolean?  @default(false)
+  created          DateTime? @default(now()) @db.Timestamptz(6)
+  updated          DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+enum RoleCategory {
+  ADMIN
+  CLIENT
+}
+
+enum panel_type {
+  ADMIN
+  CLIENT
+}

@@ -1,0 +1,70 @@
+
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: cifra-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - cifra-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cifra-backend
+    restart: always
+    env_file: .env
+    environment:
+      PORT: 3001
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - cifra-net
+    # Ejecuta solo la app; las migraciones se correrán manualmente
+    command: npm start
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_BACKEND_URL: http://localhost:3001
+    container_name: cifra-frontend
+    restart: always
+    env_file: .env
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:3001
+      BACKEND_URL: http://backend:3001
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-dummy_publishable_key}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - cifra-net
+
+volumes:
+  db_data:
+
+networks:
+  cifra-net:
+    driver: bridge
